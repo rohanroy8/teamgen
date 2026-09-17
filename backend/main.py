@@ -302,3 +302,52 @@ def memories_at(date: str, project_id: str | None = None,
     finally:
         conn.close()
     return {"date": date, "facts": facts}
+
+
+# --- Phase 4: version control (history/revert/digest/onboard) ---
+@app.get("/memories/{fact_id}/history")
+def fact_history(fact_id: str, user: dict = Depends(get_current_user)):
+    from .version import check_access, get_fact, history
+
+    conn = get_conn()
+    try:
+        fact = get_fact(conn, fact_id)
+        if fact is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "memory not found")
+        check_access(conn, user["id"], fact)
+        return history(conn, fact_id)
+    finally:
+        conn.close()
+
+
+@app.post("/memories/{fact_id}/revert")
+def fact_revert(fact_id: str, user: dict = Depends(get_current_user)):
+    from .version import revert
+
+    conn = get_conn()
+    try:
+        return revert(conn, fact_id, user["id"])
+    finally:
+        conn.close()
+
+
+@app.get("/digest")
+def digest(project_id: str, days: int = 7, user: dict = Depends(get_current_user)):
+    from .version import digest as project_digest
+
+    conn = get_conn()
+    try:
+        return project_digest(conn, user["id"], project_id, min(max(days, 1), 90))
+    finally:
+        conn.close()
+
+
+@app.get("/onboard")
+def onboard(project_id: str, user: dict = Depends(get_current_user)):
+    from .version import onboard as project_onboard
+
+    conn = get_conn()
+    try:
+        return project_onboard(conn, user["id"], project_id)
+    finally:
+        conn.close()

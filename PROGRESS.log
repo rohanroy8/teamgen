@@ -9,3 +9,4 @@
 2026-09-18 phase 2 APPROVED by human; tag v0.2; keys stored+verified (gemini-3.5-flash-lite, gpt-oss-20b); starting Phase 3
 2026-09-18 phase 3 DONE: retrieve/answer/cite + /memories + /memories/at; 12/12 tests; live Gemini cites, bob leak denied
 2026-09-18 phase 3 APPROVED (option A: second-person own facts); tag v0.3; starting Phase 4
+2026-09-18 phase 4 DONE: history/revert/digest/onboard; 16/16 tests; live history+digest+onboard verified

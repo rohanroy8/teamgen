@@ -136,7 +136,8 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
     try:
         trace = ingest_text(conn, author_id=user["id"], scope=scope,
                             scope_key=scope_key, project_id=project_id,
-                            text=body.text, msg_id=msg_id, session_key=session_key)
+                            text=body.text, msg_id=msg_id, session_key=session_key,
+                            speaker=user["username"])
     finally:
         conn.close()
 

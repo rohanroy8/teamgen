@@ -61,6 +61,8 @@ Output: [{"subject":"friend","predicate":"lives_in","object":"Delhi","type":"fac
 If the message contains no extractable fact (small talk, a question), return [].
 
 CURRENT TIME: __NOW__
+THE SPEAKER IS: @__SPEAKER__ (resolve I/me/my/mine to this username; keep other
+people's names exactly as stated, e.g. "alice" stays "alice")
 MESSAGE:
 __MESSAGE__
 """
@@ -248,7 +250,8 @@ def _sanitize(raw: object, quote: str) -> list[dict]:
 
 
 def extract_candidates(text: str, provider: BaseProvider | None = None,
-                       now: datetime | None = None) -> list[dict]:
+                       now: datetime | None = None,
+                       speaker: str | None = None) -> list[dict]:
     """LLM extraction when a provider/keys exist, else the offline fallback."""
     now = now or datetime.now(timezone.utc)
     prov = get_provider(provider)
@@ -257,6 +260,7 @@ def extract_candidates(text: str, provider: BaseProvider | None = None,
     # Brace-heavy prompt: substitute tokens instead of str.format.
     prompt = (EXTRACTION_PROMPT
               .replace("__NOW__", now.isoformat())
+              .replace("__SPEAKER__", speaker or "unknown")
               .replace("__MESSAGE__", text.strip()))
     try:
         raw_text = prov.generate(prompt)

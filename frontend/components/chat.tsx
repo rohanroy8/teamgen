@@ -59,7 +59,13 @@ export function Chat({ project, username, msgs, setMsgs }: {
       </header>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {msgs.map((m, i) => (
-          <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : ""}`}>
+          <div key={i} className={`flex flex-col gap-0.5 ${m.role === "user" ? "items-end" : "items-start"}`}>
+            <span className="text-[11px] text-neutral-400">
+              {m.role === "user"
+                ? `@${username} · ${project ? project.name : "personal"}`
+                : "TeamGen AI"}
+            </span>
+            <div className={`flex gap-2 ${m.role === "user" ? "justify-end" : ""}`}>
             {m.role === "assistant" ? <Avatar username="t" /> : null}
             <div className={`max-w-[80%] rounded-lg p-2.5 text-sm ${m.role === "user" ? "bg-neutral-900 text-white" : "bg-neutral-100"}`}>
               <p className="whitespace-pre-wrap">{m.text}</p>
@@ -71,6 +77,7 @@ export function Chat({ project, username, msgs, setMsgs }: {
                   ))}
                 </WhyCollapsible>
               ) : null}
+            </div>
             </div>
           </div>
         ))}

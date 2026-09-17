@@ -144,11 +144,12 @@ def _apply_decision(cur, decision: dict, ctx: dict, msg_id: str,
 def ingest_text(conn, *, author_id: str, scope: str, scope_key: str,
                 project_id: str | None, text: str, msg_id: str,
                 session_key: str, provider: BaseProvider | None = None,
-                candidates: list[dict] | None = None) -> dict:
+                candidates: list[dict] | None = None,
+                speaker: str | None = None) -> dict:
     """Full write path in one transaction. Returns a trace dict."""
     trace = {"retrieved": [], "rejected": [], "used": [], "writes": []}
     if candidates is None:
-        candidates = extract_candidates(text, provider=provider)
+        candidates = extract_candidates(text, provider=provider, speaker=speaker)
     vecs = embed([f"{c.get('subject','')} {c.get('predicate','')} {c.get('object','')}"
                   for c in candidates]) if candidates else []
     if vecs is None:

@@ -15,9 +15,11 @@ filtered for workspace and privacy — do not second-guess that filtering.
 Do not use any fact whose status is 'superseded', 'forgotten', or 'stale' UNLESS the user is
 explicitly asking about history or what changed.
 If the relevant facts include a status='disputed' entry, say so explicitly and do not pick a side.
-The asker is @__ASKER__. When a fact's author IS the asker, phrase it in second
-person ("you live in...") instead of "@asker says...". Facts by OTHER authors keep
-their @username attribution ("@bob says standup is at 10am").
+The asker is @__ASKER__. Each fact below has ABOUT (who it describes) and SAID-BY
+(who stated it) — these are different things. NEVER confuse them: a fact ABOUT alice
+SAID-BY @bob means "you told us alice ...", NOT "you are alice". When the asker states
+a fact about someone else, say "you said alice ...". Only use second person ("you")
+for facts ABOUT the asker. Facts ABOUT other people keep their name ("alice likes ...").
 Attribute facts to their authors with @username where it matters.
 Cite every fact you use with its [M-number] tag in the answer text.
 Return JSON ONLY, no prose, no markdown fences: {"answer": string, "used_ids": [fact uuid strings]}
@@ -38,8 +40,8 @@ def _fact_block(facts: list[dict]) -> str:
         if isinstance(date, datetime):
             date = date.date().isoformat()
         lines.append(
-            f"[M{i}] id={f['id']} status={f['status']} by @{f['author']} "
-            f"date={date} conf={f.get('confidence')} :: "
+            f"[M{i}] id={f['id']} status={f['status']} ABOUT={f['subject']} "
+            f"SAID-BY=@{f['author']} date={date} conf={f.get('confidence')} :: "
             f"{f['subject']} {f['predicate']} {f['object']}"
         )
     return "\n".join(lines)

@@ -10,3 +10,4 @@
 2026-09-18 phase 3 DONE: retrieve/answer/cite + /memories + /memories/at; 12/12 tests; live Gemini cites, bob leak denied
 2026-09-18 phase 3 APPROVED (option A: second-person own facts); tag v0.3; starting Phase 4
 2026-09-18 phase 4 DONE: history/revert/digest/onboard; 16/16 tests; live history+digest+onboard verified
+2026-09-18 phase 4 APPROVED (keep chain link); tag v0.4; E1 spec added; starting Phase 5

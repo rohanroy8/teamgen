@@ -11,3 +11,4 @@
 2026-09-18 phase 3 APPROVED (option A: second-person own facts); tag v0.3; starting Phase 4
 2026-09-18 phase 4 DONE: history/revert/digest/onboard; 16/16 tests; live history+digest+onboard verified
 2026-09-18 phase 4 APPROVED (keep chain link); tag v0.4; E1 spec added; starting Phase 5
+2026-09-18 phase 5 DONE: conflicts inbox + resolve + Memory PRs; 19/19 x3 runs; live inbox verified

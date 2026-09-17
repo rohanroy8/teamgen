@@ -351,3 +351,54 @@ def onboard(project_id: str, user: dict = Depends(get_current_user)):
         return project_onboard(conn, user["id"], project_id)
     finally:
         conn.close()
+
+
+# --- Phase 5: team governance (conflicts inbox + Memory PRs) ---
+@app.get("/conflicts")
+def conflicts(project_id: str, user: dict = Depends(get_current_user)):
+    from .team import list_conflicts
+
+    conn = get_conn()
+    try:
+        return {"conflicts": list_conflicts(conn, user["id"], project_id)}
+    finally:
+        conn.close()
+
+
+class ConflictResolveIn(BaseModel):
+    mode: str = Field(description="'accept_both' or winning memory id")
+    note: str | None = None
+
+
+@app.post("/conflicts/{conflict_id}/resolve")
+def conflict_resolve(conflict_id: str, body: ConflictResolveIn,
+                     user: dict = Depends(get_current_user)):
+    from .team import resolve_conflict
+
+    conn = get_conn()
+    try:
+        return resolve_conflict(conn, user["id"], conflict_id, body.mode, body.note)
+    finally:
+        conn.close()
+
+
+@app.post("/proposals/{proposal_id}/approve")
+def proposal_approve(proposal_id: str, user: dict = Depends(get_current_user)):
+    from .team import decide_proposal
+
+    conn = get_conn()
+    try:
+        return decide_proposal(conn, user["id"], proposal_id, True)
+    finally:
+        conn.close()
+
+
+@app.post("/proposals/{proposal_id}/reject")
+def proposal_reject(proposal_id: str, user: dict = Depends(get_current_user)):
+    from .team import decide_proposal
+
+    conn = get_conn()
+    try:
+        return decide_proposal(conn, user["id"], proposal_id, False)
+    finally:
+        conn.close()

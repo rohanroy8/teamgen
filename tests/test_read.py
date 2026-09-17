@@ -117,8 +117,9 @@ def test_t8_interpersonal_conflict_surfaced():
         conn.close()
     assert trace["writes"][0]["decision"] == "disputed"
     assert "conflict_id" in trace["writes"][0]
+    # Distinctive question pins the unique subject above orca's accumulated rows.
     facts = retrieve(auto_conn(), user_id=ALICE, scope="project", scope_key=ORCA,
-                     project_id=ORCA, question="when is the deadline?")
+                     project_id=ORCA, question=f"when is {subj} deadline?")
     objs = {f["object"] for f in facts if f["subject"] == subj}
     assert {"Friday", "Monday"} <= objs
     by_obj = {f["object"]: f["id"] for f in facts if f["subject"] == subj}

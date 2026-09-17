@@ -142,6 +142,16 @@ def resolve_candidate(conn, cand: dict, ctx: dict) -> dict:
     if same_value:
         return {"decision": "noop", "targets": same_value, "candidate": cand,
                 "reason": "rule d (duplicate re-assertion)"}
+    # Pinned-first (Phase 5 PR gate): ANY contradiction of a pinned fact by an
+    # author without direct-pin rights becomes a proposal, before rules a-c.
+    # Duplicates (above) are exempt; hedged rule (a) already yields proposed.
+    pinned = [m for m in matched if m["is_pinned"]]
+    if pinned and norm(pinned[0]["object"]) != norm(cand["object"]):
+        role = author_role(conn, project_id, author_id)
+        if role not in _PIN_DIRECT_ROLES:
+            return {"decision": "insert_proposed", "targets": [pinned[0]],
+                    "candidate": cand,
+                    "reason": "pinned target, insufficient role -> Memory PR"}
     # (a) hedged -> proposed, never touches truth
     if epistemic in ("opinion", "proposal", "uncertain"):
         return {"decision": "insert_proposed", "candidate": cand,

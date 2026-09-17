@@ -73,7 +73,20 @@ def _apply_decision(cur, decision: dict, ctx: dict, msg_id: str,
     if d == "insert_proposed":
         new_id = _insert_memory(cur, cand, ctx, "proposed", msg_id, vec)
         _log_event(cur, new_id, "proposed", actor, '{"via":"write"}')
-        return {"decision": d, "reason": decision["reason"], "ids": [new_id]}
+        # Pinned-PR proposals link to the challenged fact so approve/reject
+        # (Phase 5) can resolve them; plain hedged proposals have no targets.
+        conflict_id = None
+        for t in decision.get("targets", []):
+            cur.execute(
+                """INSERT INTO conflicts (project_id, memory_a_id, memory_b_id, status)
+                   VALUES (%s,%s,%s,'open') RETURNING id::text""",
+                (ctx["project_id"], t["id"], new_id),
+            )
+            conflict_id = cur.fetchone()[0]
+        out = {"decision": d, "reason": decision["reason"], "ids": [new_id]}
+        if conflict_id:
+            out["conflict_id"] = conflict_id
+        return out
 
     if d == "supersede":
         target = decision["targets"][0]

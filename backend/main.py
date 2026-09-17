@@ -127,7 +127,44 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
                             text=body.text, msg_id=msg_id, session_key=session_key)
     finally:
         conn.close()
-    return {"answer": "saved", "trace": trace}
+
+    # Phase 3: retrieve -> answer -> cite, with the ingest trace attached.
+    from datetime import datetime
+
+    from .answer import answer_question
+    from .llm_provider import get_provider
+    from .retrieve import retrieve
+
+    conn = get_conn()
+    try:
+        facts = retrieve(conn, user_id=user["id"], scope=scope,
+                         scope_key=scope_key, project_id=project_id,
+                         question=body.text)
+    finally:
+        conn.close()
+    owner_hint = None
+    if project_id:
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT u.username FROM projects p JOIN users u ON u.id = p.owner_id
+                       WHERE p.id = %s""",
+                    (project_id,),
+                )
+                row = cur.fetchone()
+                owner_hint = row[0] if row else None
+        finally:
+            conn.close()
+    try:
+        result = answer_question(body.text, facts, provider=get_provider(),
+                                 owner_hint=owner_hint)
+    except Exception:
+        result = {"answer": "I couldn't compose an answer right now.",
+                  "used_ids": []}
+    trace["retrieved"] = [f["id"] for f in facts]
+    return {"answer": result["answer"], "used_ids": result["used_ids"],
+            "trace": trace}
 
 
 @app.get("/projects/mine")
@@ -191,3 +228,77 @@ def invite(project_id: str, body: InviteIn, user: dict = Depends(get_current_use
             (project_id, target["id"]),
         )
     return {"project_id": project_id, "username": target["username"], "role": "member"}
+
+
+def _visible_scope(user: dict, project_id: str | None, scope: str) -> tuple[str, str | None]:
+    """Resolve + authorize the caller's memory scope. Raises 403 on no access."""
+    from .retrieve import has_access
+
+    if scope == "project" or project_id:
+        if not project_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "project_id required for project scope")
+        conn = get_conn()
+        try:
+            if not has_access(conn, user["id"], "project", project_id, project_id):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "not a project member")
+        finally:
+            conn.close()
+        return "project", project_id
+    return "personal", None
+
+
+@app.get("/memories")
+def list_memories(project_id: str | None = None, scope: str = "personal",
+                  status: str | None = None, limit: int = 50,
+                  user: dict = Depends(get_current_user)):
+    scope, pid = _visible_scope(user, project_id, scope)
+    scope_key = pid if scope == "project" else user["id"]
+    with get_conn() as conn, get_dict_cur(conn) as cur:
+        if status:
+            cur.execute(
+                """SELECT m.id::text AS id, m.subject, m.predicate, m.object, m.status,
+                          m.scope, m.valid_from, m.valid_to, m.recorded_at, m.confidence,
+                          m.quote, u.username AS author
+                   FROM memory m JOIN users u ON u.id = m.author_id
+                   WHERE m.user_id = %s AND m.scope = %s
+                     AND m.project_id IS NOT DISTINCT FROM %s AND m.status = %s
+                   ORDER BY m.recorded_at DESC LIMIT %s""",
+                (scope_key, scope, pid, status, min(limit, 200)),
+            )
+        else:
+            cur.execute(
+                """SELECT m.id::text AS id, m.subject, m.predicate, m.object, m.status,
+                          m.scope, m.valid_from, m.valid_to, m.recorded_at, m.confidence,
+                          m.quote, u.username AS author
+                   FROM memory m JOIN users u ON u.id = m.author_id
+                   WHERE m.user_id = %s AND m.scope = %s
+                     AND m.project_id IS NOT DISTINCT FROM %s
+                   ORDER BY m.recorded_at DESC LIMIT %s""",
+                (scope_key, scope, pid, min(limit, 200)),
+            )
+        return {"memories": cur.fetchall()}
+
+
+@app.get("/memories/at")
+def memories_at(date: str, project_id: str | None = None,
+                user: dict = Depends(get_current_user)):
+    """Time-travel: facts as they were true on `date` (valid-time, not ingestion)."""
+    from datetime import datetime
+
+    from .retrieve import retrieve
+
+    try:
+        as_of = datetime.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "date must be ISO8601")
+    scope = "project" if project_id else "personal"
+    scope, pid = _visible_scope(user, project_id, scope)
+    scope_key = pid if scope == "project" else user["id"]
+    conn = get_conn()
+    try:
+        facts = retrieve(conn, user_id=user["id"], scope=scope, scope_key=scope_key,
+                         project_id=pid, question="", as_of=as_of, limit=50)
+    finally:
+        conn.close()
+    return {"date": date, "facts": facts}

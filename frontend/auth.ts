@@ -6,6 +6,7 @@ import Credentials from "next-auth/providers/credentials";
 // session callback exposes it; middleware protects `/`. All server fetches forward
 // `Authorization: Bearer <session.backendToken>`. See AGENT_LOOP.md Phase 0.
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  pages: { signIn: "/login" },
   providers: [
     Credentials({
       credentials: { username: {}, password: {} },
@@ -29,6 +30,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     })
   ],
   callbacks: {
+    // Middleware gate: any matched route requires a session (/login excluded
+    // by the middleware matcher).
+    async authorized({ auth }) {
+      return !!auth;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = (user as { id?: string }).id;

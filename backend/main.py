@@ -15,8 +15,17 @@ from .auth import (
     verify_password,
 )
 from .db import get_conn, get_dict_cur
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="teamgen-memory")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in os.environ.get(
+        "FRONTEND_URL", "http://localhost:3000").split(",") if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class SignupIn(BaseModel):

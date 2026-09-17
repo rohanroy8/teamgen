@@ -411,10 +411,16 @@ I will not start Phase X+1 until you reply.
      `memory.branch_id FK branches NULL` (NULL = main; retrieval always filters
      one branch), `forks` tracked as branches with `forked_from_project_id` +
      `forked_from_branch_id`. Event log gains `branch_id` so any line replays.
-   - LLM interface (E1 only): extraction gains vc-intent detection
-     (`branch|fork|merge|diff|tag` + target names) → dedicated deterministic
-     applier (never free-form SQL); chat confirms destructive ops ("merge will
-     surface 2 disputes — proceed?").
+   - UI-first, not chat-operated (E1 only): branch/fork/merge/diff/tag are
+     clickable ReUI controls — Buttons + confirm Dialogs in the Inspector and
+     project sidebar — never parsed chat commands (chat VC is too error-prone).
+     Chat may *suggest* ("you have unmerged changes on experiment-2") but every
+     action fires from an explicit button click with a confirm step for merges.
+   - Memory versioning stays implicit (E1 only): users never manage fact
+     versions by hand — no manual supersede/revert flows at the memory level.
+     Branch/fork/merge operate at project level; per-fact history remains
+     automatic append-only under the hood, visible only as passive Timeline
+     drill-down + revert Button (Phase 4 API already supports this).
    - AuthZ (E1 only): branch creation = project member; merge to main =
      lead/owner (same rule as revert); fork inherits source visibility (a fork
      of a project you can't see is 403, same as memory access).

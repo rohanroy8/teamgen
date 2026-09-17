@@ -37,7 +37,7 @@ class MockProvider(BaseProvider):
 class GeminiProvider(BaseProvider):
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash-lite"):
+    def __init__(self, api_key: str, model: str = "gemini-3.5-flash-lite"):
         self.api_key = api_key
         self.model = model
 
@@ -57,7 +57,7 @@ class GeminiProvider(BaseProvider):
 class GroqProvider(BaseProvider):
     name = "groq"
 
-    def __init__(self, api_key: str, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, api_key: str, model: str = "openai/gpt-oss-20b"):
         self.api_key = api_key
         self.model = model
 

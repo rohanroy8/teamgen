@@ -298,8 +298,8 @@ curl -s $PROD_URL/memories?project_id=orca -H "Authorization: Bearer $TOKEN" | h
 > weakens append-only memory, server-side identity, or SQL-level scope filtering.
 
 **M1. LLM provider (FROZEN alongside auth):** `backend/llm_provider.py` interface
-`LLMProvider` (Gemini / Groq / local-mock). Primary = Gemini 2.5 Flash-Lite free tier
-(AI Studio, `GEMINI_API_KEY`); fallback = Groq `llama-3.3-70b-versatile` (`GROQ_API_KEY`,
+`LLMProvider` (Gemini / Groq / local-mock). Primary = Gemini 3.5 Flash-Lite
+(AI Studio, `GEMINI_API_KEY`); fallback = Groq `openai/gpt-oss-20b` (`GROQ_API_KEY`,
 fires only if Gemini fails); `local-mock` for deterministic resolver tests with zero API
 calls. Extraction = exactly 1 LLM call per message; one more only for resolver rule (e)
 fallback (minority path — if frequent, fix the extraction prompt, not the fallback).

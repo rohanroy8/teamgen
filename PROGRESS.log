@@ -1,0 +1,4 @@
+# TEAM MEMORY — progress log (append-only, update per human gate)
+# Format: <date> phase X: <what> | commit <hash> | tag v0.X | tests <result> | human <approved/fix/skip>
+
+2026-09-17 phase 0 STARTED: bootstrap per AGENT_LOOP.md (git init, docker-compose, backend stub, frontend ReUI Base UI, NextAuth frozen)

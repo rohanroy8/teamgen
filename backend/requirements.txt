@@ -1,0 +1,14 @@
+# Backend — Team Memory (FastAPI + Postgres+pgvector)
+# Phase 0: install deps only. Full app in later phases.
+fastapi
+uvicorn[standard]
+psycopg2-binary
+pgvector
+pydantic>=2
+python-jose[cryptography]
+passlib[bcrypt]
+openai
+anthropic
+pytest
+httpx
+python-dotenv

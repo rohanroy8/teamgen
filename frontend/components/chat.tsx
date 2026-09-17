@@ -1,6 +1,6 @@
 // ChatMain: header, messages, per-answer "Why this answer?", scoped input.
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,24 @@ export function Chat({ project, username }: { project: Project | null; username:
   const [busy, setBusy] = useState(false);
 
   const scopeHint = project ? `saving to: project/${project.name} as @${username}` : `saving to: personal as @${username}`;
+
+  // Per-scope chat persistence (browser-local): switching projects and coming
+  // back restores the conversation. Backend memory always persists server-side;
+  // cross-device chat history would need a dedicated endpoint (future).
+  const storeKey = `chat:${project?.id ?? "personal"}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storeKey);
+      setMsgs(raw ? JSON.parse(raw) : []);
+    } catch {
+      setMsgs([]);
+    }
+  }, [storeKey]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(storeKey, JSON.stringify(msgs.slice(-50)));
+    } catch { /* storage full/blocked: chat still works in-memory */ }
+  }, [msgs, storeKey]);
 
   async function send() {
     const text = input.trim();

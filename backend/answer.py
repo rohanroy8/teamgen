@@ -15,6 +15,9 @@ filtered for workspace and privacy — do not second-guess that filtering.
 Do not use any fact whose status is 'superseded', 'forgotten', or 'stale' UNLESS the user is
 explicitly asking about history or what changed.
 If the relevant facts include a status='disputed' entry, say so explicitly and do not pick a side.
+The asker is @__ASKER__. When a fact's author IS the asker, phrase it in second
+person ("you live in...") instead of "@asker says...". Facts by OTHER authors keep
+their @username attribution ("@bob says standup is at 10am").
 Attribute facts to their authors with @username where it matters.
 Cite every fact you use with its [M-number] tag in the answer text.
 Return JSON ONLY, no prose, no markdown fences: {"answer": string, "used_ids": [fact uuid strings]}
@@ -44,7 +47,8 @@ def _fact_block(facts: list[dict]) -> str:
 
 def answer_question(question: str, facts: list[dict],
                     provider: BaseProvider | None = None,
-                    owner_hint: str | None = None) -> dict:
+                    owner_hint: str | None = None,
+                    asker: str | None = None) -> dict:
     """Returns {answer, used_ids}. used_ids is always a subset of fact ids."""
     valid_ids = {f["id"] for f in facts}
     if not facts:
@@ -57,7 +61,8 @@ def answer_question(question: str, facts: list[dict],
                 "used_ids": [top["id"]]}
     prompt = (ANSWER_PROMPT
               .replace("__FACTS__", _fact_block(facts))
-              .replace("__QUESTION__", question.strip()))
+              .replace("__QUESTION__", question.strip())
+              .replace("__ASKER__", asker or "unknown"))
     try:
         data = json.loads(prov.generate(prompt))
         answer = str(data.get("answer", "")).strip()

@@ -158,7 +158,7 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
             conn.close()
     try:
         result = answer_question(body.text, facts, provider=get_provider(),
-                                 owner_hint=owner_hint)
+                                 owner_hint=owner_hint, asker=user["username"])
     except Exception:
         result = {"answer": "I couldn't compose an answer right now.",
                   "used_ids": []}

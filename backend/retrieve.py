@@ -4,8 +4,10 @@ Scope/privacy filtering happens HERE (SQL + vector query), BEFORE any fact
 reaches the answer LLM. A fact outside the caller's scope can never enter the
 LLM context, even as the closest embedding match.
 
-Rerank: 0.35*sim + 0.20*exp(-age_days/HALF_LIFE) + 0.20*importance
-        + 0.15*confidence + 0.10*log-scaled access.
+Rerank: 0.55*sim + 0.10*exp(-age_days/HALF_LIFE) + 0.15*importance
+        + 0.10*confidence + 0.10*log-scaled access.
+Similarity dominates: a young irrelevant row must never outrank an older
+exact match (recency/importance/confidence only break near-ties).
 """
 import math
 import re
@@ -147,8 +149,8 @@ def retrieve(conn, *, user_id: str, scope: str, scope_key: str,
         recency = math.exp(-age_days / HALF_LIFE_DAYS)
         conf = r["confidence"] if r["confidence"] is not None else 0.5
         access = min(1.0, math.log1p(r["access_count"] or 0) / math.log1p(9))
-        score = (0.35 * sim + 0.20 * recency + 0.20 * (r["importance"] or 0.5)
-                 + 0.15 * conf + 0.10 * access)
+        score = (0.55 * sim + 0.10 * recency + 0.15 * (r["importance"] or 0.5)
+                 + 0.10 * conf + 0.10 * access)
         r["sim"], r["score"] = sim, score
         scored.append(r)
     scored.sort(key=lambda r: r["score"], reverse=True)

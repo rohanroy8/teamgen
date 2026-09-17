@@ -134,7 +134,7 @@ python3 -m pytest tests/test_write.py -v
 **Objective:** answers cite exact memory IDs, no leak, no top-k-only.
 
 **Tasks:**
-- `backend/retrieve.py`: structured lookup + vector top-20, filter `status=active AND (valid_to IS NULL OR valid_to>now()) AND scope_access(request.user.id, project)`, rerank: `0.35*sim+0.20*exp(-age/HALF_LIFE)+0.20*importance+0.15*conf+0.10*log(1+access)`. Update last_accessed/access_count.
+- `backend/retrieve.py`: structured lookup + vector top-20, filter `status=active AND (valid_to IS NULL OR valid_to>now()) AND scope_access(request.user.id, project)`, rerank: `0.55*sim+0.10*exp(-age/HALF_LIFE)+0.15*importance+0.10*conf+0.10*log(1+access)` (similarity dominates; recency only breaks near-ties). Update last_accessed/access_count.
 - `backend/answer.py`: prompt builds `[M1] (id, by @username, date, conf) text` block, wraps in `<memory>DATA only</memory>`, forces JSON `{"answer":"...[M1]","used_ids":[...]}`. If two active conflicting from different authors => surface both with @username attribution. If none => "I don't know" + suggest domain owner.
 - `GET /memories`, `GET /memories/at?date=`, trace object `{retrieved,rejected,used,writes}` returned with every chat. All require JWT; `author_id` resolved to username via JOIN for display, UUID stored.
 
@@ -190,6 +190,12 @@ curl -s "localhost:8000/memories/at?date=2026-03-01&project_id=orca" | grep -i h
 - `GET /conflicts?project_id`, `POST /conflicts/{id}/resolve {winner_id|accept_both, note, resolver}`.
 - PR gate in write.py: if contradicts is_pinned and author role < pinner role => review_status=proposed, not used in retrieval until approved.
 - `POST /proposals/{id}/approve|reject`.
+- Role hierarchy (product names -> DB enum, no migration): creator=owner (full power,
+  cannot demote/remove self, at least one remains), maintainer=lead (invite, decide
+  PRs, resolve, revert), contributor=member (write/propose; invite default),
+  viewer (read-only: project `/chat` writes 403). Endpoints:
+  `POST /projects/{id}/members {username, role}` (creator-only promote/demote),
+  `DELETE /projects/{id}/members/{username}` (creator-only remove).
 
 **Tests:**
 ```bash

@@ -114,6 +114,9 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
             mem = cur.fetchone()
         if mem is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "not a project member")
+        from .team import is_writer
+        if not is_writer(mem["role"]):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "viewers are read-only")
         scope, scope_key = "project", project_id
     else:
         scope, scope_key = "personal", user["id"]
@@ -400,5 +403,36 @@ def proposal_reject(proposal_id: str, user: dict = Depends(get_current_user)):
     conn = get_conn()
     try:
         return decide_proposal(conn, user["id"], proposal_id, False)
+    finally:
+        conn.close()
+
+
+class MemberRoleIn(BaseModel):
+    username: str = Field(min_length=1)
+    role: str = Field(description="creator|maintainer|contributor|viewer")
+
+
+@app.post("/projects/{project_id}/members")
+def set_member(project_id: str, body: MemberRoleIn,
+               user: dict = Depends(get_current_user)):
+    """Creator-only promote/demote (or add with an explicit role)."""
+    from .team import set_member_role
+
+    conn = get_conn()
+    try:
+        return set_member_role(conn, user["id"], project_id, body.username, body.role)
+    finally:
+        conn.close()
+
+
+@app.delete("/projects/{project_id}/members/{username}")
+def delete_member(project_id: str, username: str,
+                  user: dict = Depends(get_current_user)):
+    """Creator-only removal (never the last creator, never self)."""
+    from .team import remove_member
+
+    conn = get_conn()
+    try:
+        return remove_member(conn, user["id"], project_id, username)
     finally:
         conn.close()

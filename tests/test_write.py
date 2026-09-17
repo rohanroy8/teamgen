@@ -10,8 +10,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Phase 2 tests exercise the OFFLINE fallback extractor: force no-provider even
-# if keys ever appear in the environment.
+# Deterministic offline mode: force the fallback extractor even though .env
+# carries live keys (load_dotenv import order must never matter).
+os.environ["TEAMGEN_OFFLINE"] = "1"
 for _k in ("LLM_PROVIDER", "GEMINI_API_KEY", "GROQ_API_KEY"):
     os.environ.pop(_k, None)
 

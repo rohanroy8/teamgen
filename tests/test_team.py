@@ -6,10 +6,92 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+os.environ["TEAMGEN_OFFLINE"] = "1"  # deterministic: never hit live LLM in tests
+
 from backend.db import get_conn  # noqa: E402
 from backend.retrieve import retrieve  # noqa: E402
 from backend.team import decide_proposal, list_conflicts, resolve_conflict  # noqa: E402
+from backend.team import remove_member, set_member_role  # noqa: E402
 from backend.write import ingest_text  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
+
+
+def role_of(project, user):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT role FROM memberships WHERE project_id = %s AND user_id = %s "
+            "AND left_at IS NULL",
+            (project, user),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+# Hierarchy: creator promotes contributor -> maintainer; maintainer cannot promote;
+# creator cannot demote self. (Product names accepted as aliases.)
+def test_hierarchy_promote_demote():
+    out = set_member_role(get_conn(), ALICE, ORCA, "bob", "maintainer")
+    assert out["role"] == "lead" and role_of(ORCA, BOB) == "lead"
+    try:
+        try:
+            set_member_role(get_conn(), BOB, ORCA, "charlie", "maintainer")
+            assert False, "expected 403"
+        except HTTPException as e:
+            assert e.status_code == 403
+        try:
+            set_member_role(get_conn(), ALICE, ORCA, "alice", "contributor")
+            assert False, "expected 400"
+        except HTTPException as e:
+            assert e.status_code == 400
+    finally:
+        set_member_role(get_conn(), ALICE, ORCA, "bob", "contributor")
+    assert role_of(ORCA, BOB) == "member"
+
+
+# Removal: creator removes + restores; cannot remove self; last creator safe.
+def test_hierarchy_remove():
+    charlie = user_id("charlie")
+    assert role_of(ORCA, charlie) == "member"
+    out = remove_member(get_conn(), ALICE, ORCA, "charlie")
+    assert out["removed"] is True and role_of(ORCA, charlie) is None
+    try:
+        try:
+            remove_member(get_conn(), ALICE, ORCA, "alice")
+            assert False, "expected 400"
+        except HTTPException as e:
+            assert e.status_code == 400
+    finally:
+        set_member_role(get_conn(), ALICE, ORCA, "charlie", "contributor")
+    assert role_of(ORCA, charlie) == "member"
+
+
+# Viewers read-only: project /chat returns 403, reads still work.
+def test_viewer_read_only():
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    charlie = user_id("charlie")
+    set_member_role(get_conn(), ALICE, ORCA, "charlie", "viewer")
+    client = TestClient(app)
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT password_hash FROM users WHERE username = 'charlie'")
+        # login via API (password is demo123 from seed)
+        r = client.post("/auth/login", json={"username": "charlie", "password": "demo123"})
+        assert r.status_code == 200, r.text
+        tok = r.json()["access_token"]
+        h = {"Authorization": f"Bearer {tok}"}
+        w = client.post("/chat", headers=h,
+                        json={"text": "viewers cannot write", "project_id": ORCA,
+                              "scope": "project", "msg_id": "viewer1"})
+        assert w.status_code == 403, w.text
+        listing = client.get("/memories", headers=h,
+                             params={"project_id": ORCA, "scope": "project"})
+        assert listing.status_code == 200
+    finally:
+        set_member_role(get_conn(), ALICE, ORCA, "charlie", "contributor")
+    assert role_of(ORCA, charlie) == "member"
 
 
 def user_id(name: str) -> str:

@@ -101,6 +101,10 @@ def get_provider(explicit: BaseProvider | None = None) -> BaseProvider | None:
     """
     if explicit is not None:
         return explicit
+    # Deterministic offline mode for tests: never touch the network even if
+    # keys are present in the environment (load_dotenv would otherwise leak them).
+    if os.environ.get("TEAMGEN_OFFLINE", "").lower() in ("1", "true", "yes"):
+        return None
     if os.environ.get("LLM_PROVIDER", "").lower() == "mock":
         return MockProvider()
     gemini_key = os.environ.get("GEMINI_API_KEY", "")

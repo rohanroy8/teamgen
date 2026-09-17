@@ -1,9 +1,35 @@
-"""Team governance — conflicts inbox + Memory PR approve/reject (Phase 5)."""
+"""Team governance — conflicts inbox + Memory PR approve/reject (Phase 5).
+
+Role hierarchy (product names -> DB enum, no migration):
+  creator    = owner      — full power: promote/demote/remove, decide PRs,
+                            resolve conflicts, revert, invite. At least one
+                            creator always remains; a creator cannot demote
+                            or remove themselves.
+  maintainer = lead       — invite contributors, decide PRs, resolve conflicts,
+                            revert. Cannot change roles.
+  contributor = member    — chat/write, open proposals. Default on invite.
+  viewer                 — read-only: retrieval + read endpoints, no writes.
+"""
 from fastapi import HTTPException, status
 
 from .db import get_dict_cur
 
 _LEAD_ROLES = {"owner", "lead"}
+_ROLE_RANK = {"owner": 4, "lead": 3, "member": 2, "viewer": 1}
+_VALID_ROLES = ("owner", "lead", "member", "viewer")
+
+# Product-facing aliases accepted by the members endpoints.
+_ROLE_ALIASES = {"creator": "owner", "maintainer": "lead",
+                 "contributor": "member", "viewer": "viewer",
+                 "owner": "owner", "lead": "lead", "member": "member"}
+
+
+def canonical_role(role: str) -> str:
+    try:
+        return _ROLE_ALIASES[role.strip().lower()]
+    except (KeyError, AttributeError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "role must be creator|maintainer|contributor|viewer")
 
 
 def _membership(cur, project_id: str | None, user_id: str) -> str | None:
@@ -139,6 +165,105 @@ def _check_proposal_auth(cur, user_id: str, prop: dict):
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN,
                         "only project leads/owners (or the proposer) decide PRs")
+
+
+def set_member_role(conn, requester_id: str, project_id: str,
+                    username: str, role: str) -> dict:
+    """Creator-only promote/demote (incl. adding as a specific role)."""
+    from .auth import normalize_username
+
+    role = canonical_role(role)
+    old, conn.autocommit = conn.autocommit, False
+    try:
+        with conn, get_dict_cur(conn) as cur:
+            if _membership(cur, project_id, requester_id) != "owner":
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    "only the project creator can change roles")
+            cur.execute("SELECT id::text AS id, username FROM users WHERE username = %s",
+                        (normalize_username(username),))
+            target = cur.fetchone()
+            if target is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+            if target["id"] == requester_id:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    "creators cannot change their own role")
+            cur.execute(
+                """INSERT INTO memberships (project_id, user_id, role)
+                   VALUES (%s,%s,%s)
+                   ON CONFLICT (project_id, user_id)
+                   DO UPDATE SET role = EXCLUDED.role, left_at = NULL,
+                                 joined_at = now()
+                   RETURNING role""",
+                (project_id, target["id"], role),
+            )
+            return {"project_id": project_id, "username": target["username"],
+                    "role": cur.fetchone()["role"]}
+    finally:
+        conn.autocommit = old
+
+
+def remove_member(conn, requester_id: str, project_id: str, username: str) -> dict:
+    """Creator-only removal. Never removes the last creator, never self."""
+    from .auth import normalize_username
+
+    old, conn.autocommit = conn.autocommit, False
+    try:
+        with conn, get_dict_cur(conn) as cur:
+            if _membership(cur, project_id, requester_id) != "owner":
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    "only the project creator can remove members")
+            cur.execute("SELECT id::text AS id, username FROM users WHERE username = %s",
+                        (normalize_username(username),))
+            target = cur.fetchone()
+            if target is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+            if target["id"] == requester_id:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    "creators cannot remove themselves")
+            cur.execute(
+                "SELECT role FROM memberships WHERE project_id = %s AND user_id = %s "
+                "AND left_at IS NULL",
+                (project_id, target["id"]),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "not a member")
+            if row["role"] == "owner":
+                cur.execute(
+                    """SELECT count(*) FROM memberships
+                       WHERE project_id = %s AND role = 'owner' AND left_at IS NULL""",
+                    (project_id,),
+                )
+                if cur.fetchone()["count"] <= 1:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                        "cannot remove the last creator")
+            cur.execute(
+                "UPDATE memberships SET left_at = now() "
+                "WHERE project_id = %s AND user_id = %s",
+                (project_id, target["id"]),
+            )
+            return {"project_id": project_id, "username": target["username"],
+                    "removed": True}
+    finally:
+        conn.autocommit = old
+
+
+def is_writer(role: str | None) -> bool:
+    return _ROLE_RANK.get(role or "", 0) >= _ROLE_RANK["member"]
+
+
+def require_writer(conn, project_id: str, user_id: str):
+    """Viewers are read-only: block writes (chat, invite targets unaffected)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT role FROM memberships
+               WHERE project_id = %s AND user_id = %s AND left_at IS NULL""",
+            (project_id, user_id),
+        )
+        row = cur.fetchone()
+    if not is_writer(row[0] if row else None):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "viewers are read-only")
 
 
 def decide_proposal(conn, user_id: str, proposal_id: str, approve: bool) -> dict:

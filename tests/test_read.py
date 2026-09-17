@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+os.environ["TEAMGEN_OFFLINE"] = "1"  # deterministic: never hit live LLM in tests
+
 from backend.answer import answer_question  # noqa: E402
 from backend.db import get_conn  # noqa: E402
 from backend.llm_provider import MockProvider  # noqa: E402

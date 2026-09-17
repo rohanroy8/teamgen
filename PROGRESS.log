@@ -17,3 +17,4 @@
 2026-09-18 phase 6 DONE: ReUI chat UI (sidebar/chat/inspector), middleware gate /login, build green
 2026-09-18 phase 6 APPROVED (proceed signal); tag v0.6; starting Phase 7 hardening
 2026-09-18 phase 7 DONE: edge suite (empty/isolate/200msg/failover/no-greetings); 27/27 x3; orphans 0
+2026-09-18 phase 7 APPROVED (proceed signal); tag v0.7; attribution fix included; starting Phase 8

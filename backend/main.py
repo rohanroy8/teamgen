@@ -30,6 +30,21 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1)
 
 
+class ChatIn(BaseModel):
+    text: str = Field(min_length=1)
+    project_id: str | None = None
+    scope: str = "personal"
+    msg_id: str | None = None
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class InviteIn(BaseModel):
+    username: str = Field(min_length=1)
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "phase": 1}
@@ -78,7 +93,101 @@ def me(user: dict = Depends(get_current_user)):
     return user
 
 
-# --- Phase 2+ stubs (wired in their phases, listed here so routes 404 cleanly) ---
+# --- Phase 2: write path (extract -> resolve -> write). Answer generation lands in Phase 3. ---
 @app.post("/chat")
-def chat_stub(user: dict = Depends(get_current_user)):
-    return {"detail": "chat lands in Phase 2"}
+def chat(body: ChatIn, user: dict = Depends(get_current_user)):
+    import uuid
+
+    from .write import ingest_text
+
+    scope = body.scope if body.scope in ("personal", "project") else "personal"
+    project_id = body.project_id
+    if scope == "project" or project_id:
+        if not project_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id required for project scope")
+        with get_conn() as conn, get_dict_cur(conn) as cur:
+            cur.execute(
+                """SELECT role FROM memberships
+                   WHERE project_id = %s AND user_id = %s AND left_at IS NULL""",
+                (project_id, user["id"]),
+            )
+            mem = cur.fetchone()
+        if mem is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "not a project member")
+        scope, scope_key = "project", project_id
+    else:
+        scope, scope_key = "personal", user["id"]
+    msg_id = body.msg_id or f"api-{uuid.uuid4().hex[:12]}"
+    session_key = f"{user['id']}:{(project_id or 'personal')}"
+    # ingest_text owns its transaction: pass an un-entered connection.
+    conn = get_conn()
+    try:
+        trace = ingest_text(conn, author_id=user["id"], scope=scope,
+                            scope_key=scope_key, project_id=project_id,
+                            text=body.text, msg_id=msg_id, session_key=session_key)
+    finally:
+        conn.close()
+    return {"answer": "saved", "trace": trace}
+
+
+@app.get("/projects/mine")
+def my_projects(user: dict = Depends(get_current_user)):
+    with get_conn() as conn, get_dict_cur(conn) as cur:
+        cur.execute(
+            """SELECT p.id::text AS id, p.name, m.role
+               FROM projects p JOIN memberships m ON m.project_id = p.id
+               WHERE m.user_id = %s AND m.left_at IS NULL ORDER BY p.name""",
+            (user["id"],),
+        )
+        return {"projects": cur.fetchall()}
+
+
+@app.post("/projects", status_code=201)
+def create_project(body: ProjectIn, user: dict = Depends(get_current_user)):
+    with get_conn() as conn, get_dict_cur(conn) as cur:
+        cur.execute(
+            "INSERT INTO projects (name, owner_id) VALUES (%s,%s) RETURNING id::text AS id, name",
+            (body.name.strip(), user["id"]),
+        )
+        proj = cur.fetchone()
+        cur.execute(
+            "INSERT INTO memberships (project_id, user_id, role) VALUES (%s,%s,'owner')",
+            (proj["id"], user["id"]),
+        )
+    return proj
+
+
+@app.post("/projects/{project_id}/invite")
+def invite(project_id: str, body: InviteIn, user: dict = Depends(get_current_user)):
+    from .auth import normalize_username
+
+    with get_conn() as conn, get_dict_cur(conn) as cur:
+        cur.execute(
+            """SELECT role FROM memberships
+               WHERE project_id = %s AND user_id = %s AND left_at IS NULL""",
+            (project_id, user["id"]),
+        )
+        mem = cur.fetchone()
+        if mem is None or mem["role"] not in ("owner", "lead"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                "only project owners/leads can invite")
+        username = normalize_username(body.username)
+        cur.execute("SELECT id::text AS id, username FROM users WHERE username = %s",
+                    (username,))
+        target = cur.fetchone()
+        if target is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+        cur.execute(
+            "SELECT left_at FROM memberships WHERE project_id = %s AND user_id = %s",
+            (project_id, target["id"]),
+        )
+        existing = cur.fetchone()
+        if existing and existing["left_at"] is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "already member")
+        cur.execute(
+            """INSERT INTO memberships (project_id, user_id, role) VALUES (%s,%s,'member')
+               ON CONFLICT (project_id, user_id)
+               DO UPDATE SET role='member', left_at=NULL, joined_at=now()""",
+            (project_id, target["id"]),
+        )
+    return {"project_id": project_id, "username": target["username"], "role": "member"}

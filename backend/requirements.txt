@@ -9,6 +9,8 @@ python-jose[cryptography]
 passlib[bcrypt]
 openai
 anthropic
+google-genai
+groq
 pytest
 httpx
 python-dotenv

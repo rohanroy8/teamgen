@@ -18,7 +18,7 @@ You are in HUMAN-GATED LOOP mode (not fully autonomous).
 9. UX: ChatGPT/Claude clone — left sidebar = New Project + project list, main = chat, right/toggle = Memory Inspector. Invite collaborators by username via Dialog.
 10. At end, output COMPLETION REPORT: demo URL, test logins, what passes, known gaps.
 
-Stack (do not change mid-loop): FastAPI + Postgres+pgvector + Next.js (App Router) + Tailwind + shadcn + ReUI Base UI. Embeddings: bge-small local fallback, or text-embedding-3-small if OPENAI_API_KEY exists. Auth: FROZEN — NextAuth credentials (frontend) + FastAPI JWT backend (python-jose + passlib). No change allowed.
+Stack (do not change mid-loop): FastAPI + Postgres+pgvector + Next.js (App Router) + Tailwind + shadcn + ReUI Base UI. Embeddings: bge-small local fallback, or text-embedding-3-small if OPENAI_API_KEY exists. Auth: FROZEN — NextAuth credentials (frontend) + FastAPI JWT backend (python-jose + passlib). No change allowed. LLM provider FROZEN per M1 (Gemini 2.5 Flash-Lite primary, Groq fallback, local-mock for tests).
 
 Workspace: `/home/roy/projects/teamgen`. Backend in `./backend`, frontend in `./frontend`, tests in `./tests`.
 
@@ -67,6 +67,7 @@ npx shadcn --version; ls frontend/components/ui | head -20 # ReUI Base UI presen
 - Auth endpoints: `POST /auth/signup`, `/auth/login` (bcrypt + JWT, 24h expiry), `GET /me` (from JWT). Middleware: `get_current_user()` -> all `/chat`, `/memories`, `/projects` use `request.user.id`, never trust client-sent user_id.
 - `backend/seed.py`: create users alice/lead, bob/member, charlie/new (password `demo123`, log it) + projects orca, phoenix + backdated memory chain (Hyd superseded->Blr by alice UUID, GCP pinned project fact, stale Hinglish pref, alice personal secret for leak test). Seed via UUID lookups, not hardcoded strings.
 - Rule: NEVER DELETE from memory. Invite = insert membership, never share passwords.
+- Plus MERGE M3 columns/indexes (fact_key, epistemic_status, override_signal, asserted_strength, recorded_at, source_message_id, conflicts_with_id, disputed|stale|forgotten statuses) and the `messages` table.
 
 **Prompt to self:**
 > Users first, then memory with UUID FKs. Every write sets author_id from JWT. Scope filter in SQL.
@@ -109,6 +110,7 @@ psql $DATABASE_URL -c "SELECT object,status FROM memory WHERE predicate='lives_i
 
 **Prompt to self:**
 > Implement extract with fallback regex if no LLM key. Implement resolve exactly per rules above. Log to memory_event. Enforce author_id from auth.
+> MERGE OVERRIDE: resolver follows M4 (epistemic rules a-e + pinned-PR exception), extraction follows Ledger prompt 7a per M2 via llm_provider (M1).
 
 **Tests (run yourself):**
 ```bash
@@ -138,6 +140,7 @@ python3 -m pytest tests/test_write.py -v
 
 **Prompt to self:**
 > Two channels minimum. Enforce scope filter in SQL, not prompt. Parse used_ids, store trace.
+> MERGE OVERRIDE: answer generation follows Ledger prompt 7b per M5 (disputed explicit, ids from list only).
 
 **Tests:**
 ```bash
@@ -250,7 +253,8 @@ curl -s localhost:8000/digest?project_id=orca -H "Authorization: Bearer $TOKEN" 
 ---
 ## PHASE 7 — Hardening (edge suite)
 
-**Run full suite, fix what breaks:**
+**Run full suite, fix what breaks (MERGE M6: T1-T15 + Ledger 16-case mapping, T1 as real
+subprocess restart, plus `POST /eval/run` scoreboard endpoint):**
 ```bash
 python3 -m pytest tests/ -v
 # Must include T1-T15 from guide. Add:
@@ -272,6 +276,7 @@ psql $DATABASE_URL -c "SELECT predicate FROM memory WHERE raw_text ILIKE '%hello
 - Deploy backend to Railway/Render/Fly, frontend to Vercel. Env: DATABASE_URL, JWT_SECRET, LLM_KEY. Test from phone data (not localhost).
 - Restart service, login again, re-ask "where do I live?" => must survive (track rule). Invite-by-username must work in prod.
 - Rehearse 9-step demo 3x, time <5min. Final `git tag v1.0-demo`.
+- MERGE M7: demo follows Ledger 6 beats on our stack + invite/privacy beat, closes with live `/eval/run` scoreboard.
 
 **Tests:**
 ```bash
@@ -283,6 +288,86 @@ curl -s $PROD_URL/memories?project_id=orca -H "Authorization: Bearer $TOKEN" | h
 **Done when:** prod auth + restart passes.
 
 **HUMAN GATE 8 (final):** human does full demo on prod URL, approves v1.0-demo. Output COMPLETION REPORT.
+
+---
+
+## MERGE ADDENDUM — Ledger best-of, locked (Gemini provider)
+
+> Adopted from `ledger-prd (1).md` + `ledger-master-workplan.md`. Ledger's resolver science +
+> eval rigor, on our platform (Postgres, NextAuth+JWT, projects/roles, ReUI). Nothing below
+> weakens append-only memory, server-side identity, or SQL-level scope filtering.
+
+**M1. LLM provider (FROZEN alongside auth):** `backend/llm_provider.py` interface
+`LLMProvider` (Gemini / Groq / local-mock). Primary = Gemini 2.5 Flash-Lite free tier
+(AI Studio, `GEMINI_API_KEY`); fallback = Groq `llama-3.3-70b-versatile` (`GROQ_API_KEY`,
+fires only if Gemini fails); `local-mock` for deterministic resolver tests with zero API
+calls. Extraction = exactly 1 LLM call per message; one more only for resolver rule (e)
+fallback (minority path — if frequent, fix the extraction prompt, not the fallback).
+
+**M2. Extraction applies Ledger prompt 7a verbatim** (epistemic_status + override_signal +
+asserted_strength + valid_from + wide few-shot set). Add `quote` + `scope_hint` to each
+candidate. Extraction correctness is the #1 demo risk — adversarially test phrasings
+("I think", "actually", "client confirmed", "maybe we should") before rehearsal.
+
+**M3. Schema deltas (Phase 1 adds these, exact names):**
+- New `messages(id UUID PK DEFAULT gen_random_uuid(), project_id UUID FK nullable,
+  author_id UUID NOT NULL REFERENCES users(id), text TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now())` — provenance chain fact -> message -> user.
+- `memory` adds: `fact_key TEXT NOT NULL` (= lower(trim(subject)) || '::' ||
+  lower(trim(attribute)), computed at insert), `epistemic_status TEXT NOT NULL CHECK
+  (epistemic_status IN ('asserted','correction','proposal','opinion','uncertain'))`,
+  `override_signal BOOLEAN NOT NULL DEFAULT false`, `asserted_strength REAL`,
+  `recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()` (ingestion time; distinct from
+  `valid_from` = when fact became true), `source_message_id UUID REFERENCES
+  messages(id)`, `conflicts_with_id UUID REFERENCES memory(id)`.
+- `memory.status` superset: `active|superseded|retracted|expired|proposed|rejected`
+  + `disputed|stale|forgotten`. `proposed` = sitting un-adopted (pairs with
+  epistemic `proposal`); never shown as truth until approved.
+
+**M4. Merged resolver (replaces Phase 2 CARDINALITY-only logic):**
+```
+1. extract (Gemini, 1 call) -> candidates {subject,predicate->attribute,object->value,
+   type,epistemic_status,override_signal,asserted_strength,valid_from,quote,scope_hint}
+2. fact_key = norm(subject)+'::'+norm(attribute); STRUCTURED lookup scoped to
+   (user_id,scope,project_id,status=active) + pgvector paraphrase check (>0.85,
+   same scope filter in SQL). Privacy/scope filter lives in exactly TWO places:
+   the SQL builder and the vector query wrapper — before any fact reaches the LLM.
+3. first match wins:
+   a. epistemic IN (opinion,proposal,uncertain) -> INSERT status=proposed.
+      NEVER touches active truth. (No role table needed for this case.)
+   b. correction OR override_signal=true -> SUPERSEDE in one txn, EXCEPT pinned
+      target contradicted by lower role -> INSERT status=proposed (Memory PR).
+   c. asserted + contradicts active + different author + no override ->
+      new.status=disputed, new.conflicts_with_id=old.id, old STAYS active,
+      insert conflicts row (open). Do not guess a winner.
+   d. same value re-asserted -> no-op (evidence_count++, no new row).
+   e. fits none of a-d -> single LLM fallback classify, re-apply a-d. Minority path.
+4. FORGET ("forget X"): status=forgotten, valid_to=now, AND embedding nulled so it is
+   absent from vector search. Row is KEPT (append-only preserved) but irretrievable.
+   Test both stores explicitly.
+5. DECAY lazy on read, no background jobs: type=task AND now-valid_from>threshold
+   AND no re-confirmation -> status=stale (inspector only, excluded from answers).
+```
+
+**M5. Answer pipeline applies Ledger prompt 7b:** facts pre-filtered (never
+superseded/forgotten/stale unless history asked); disputed surfaced explicitly with
+@username attribution, no side picked; JSON `{"answer","used_ids"}`; ids cited from a
+separate list, never invented.
+
+**M6. Eval = ours T1-T15 PLUS Ledger's 16 (dedupe overlap):** add paraphrase dedupe,
+exact-duplicate no-op, stale-task exclusion, nonsense-input safety, closest-embedding
+leak (private fact excluded even as top vector match), cross-scope identical fact_key
+empty, bi-temporal valid_from-vs-recorded_at distinction, Groq-fallback-fires test.
+T1 strengthened: kill + restart the REAL server subprocess, re-query, same answers.
+New endpoint `POST /eval/run` -> live pass/fail scoreboard (shown at demo close).
+
+**M7. Demo = Ledger 6 beats on our stack + invite beat:** (1) remember+restart,
+(2) correct, (3) "Why?" inspector click, (4) time-travel, (5) dispute->resolve
+(Oct 10 vs "I think Oct 3" vs "client confirmed Oct 3"), (6) invite bob by username +
+privacy beat, close with live `/eval/run` scoreboard. Honest framing only.
+
+**M8. Env:** `GEMINI_API_KEY` (primary), `GROQ_API_KEY` (fallback), keep
+`EMBEDDING_MODE`. `LLM_KEY` retired. Backend deps add `google-genai groq`.
 
 ---
 ## HUMAN GATE TEMPLATE (agent: paste this at end of EVERY phase, then STOP)

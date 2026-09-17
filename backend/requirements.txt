@@ -6,7 +6,8 @@ psycopg2-binary
 pgvector
 pydantic>=2
 python-jose[cryptography]
-passlib[bcrypt]
+passlib[bcrypt]  # listed per spec; runtime uses bcrypt directly (passlib vs bcrypt>=4 wrap bug)
+bcrypt
 openai
 anthropic
 google-genai

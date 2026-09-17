@@ -163,7 +163,9 @@ def test_t13_time_travel():
     now_facts = retrieve(auto_conn(), user_id=ALICE, scope="personal",
                          scope_key=ALICE, project_id=None,
                          question="where do I live?")
-    past_lives = [f for f in past if f["predicate"] == "lives_in"]
-    now_lives = [f for f in now_facts if f["predicate"] == "lives_in"]
+    past_lives = [f for f in past
+                  if f["predicate"] == "lives_in" and f["subject"] == "alice"]
+    now_lives = [f for f in now_facts
+                 if f["predicate"] == "lives_in" and f["subject"] == "alice"]
     assert past_lives and past_lives[0]["object"] == "Hyderabad"
     assert now_lives and now_lives[0]["object"] == "Bangalore"

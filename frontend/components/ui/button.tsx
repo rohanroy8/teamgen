@@ -3,7 +3,11 @@ import * as React from "react";
 import { Button as BaseButton } from "@base-ui/react/button";
 import { cn } from "@/lib/utils";
 
-export function Button({ className, ...props }: React.ComponentProps<typeof BaseButton>) {
+type ButtonProps = Omit<React.ComponentProps<typeof BaseButton>, "className"> & {
+  className?: string;
+};
+
+export function Button({ className, ...props }: ButtonProps) {
   return (
     <BaseButton
       className={cn(

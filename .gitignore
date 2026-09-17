@@ -4,5 +4,6 @@ __pycache__/
 .pytest_cache/
 node_modules/
 .next/
+frontend/next-env.d.ts
 .env
 pgdata/

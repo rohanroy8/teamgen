@@ -394,6 +394,36 @@ I will not start Phase X+1 until you reply.
 
 ## RECOMMENDATIONS (add if time, in this order)
 
+0. **E1 — GitHub-like VC for project knowledge, LLM-operated (ENHANCEMENT, post-v1.0 — DO NOT build in Phases 0-8).**
+   Not version control *of* memories (that's Phase 4 history) and not git-for-code:
+   branches, forks, merges *of a project's knowledge state*, driven through chat
+   ("fork orca for an experiment", "branch the deadline debate", "merge it back").
+   - Concepts: `main` branch per project (everything today); named branches as
+     divergent lines of team belief; forks as independent copies (same or new
+     project scope); merges replay one line onto another; tags/snapshots pin a
+     state for demo or audit; diff shows added/superseded/disputed between lines.
+   - Reuse, don't rebuild: merge conflicts flow into the existing `conflicts`
+     table + disputed status (M4-c); branch proposals reuse `proposed`/PR flow
+     (Phase 5); per-branch activity reuses digest; per-branch history reuses the
+     Phase 4 chain API; scope filtering stays in SQL (branch is part of scope).
+   - Schema sketch (E1 only): `branches(id UUID PK, project_id FK, name UNIQUE
+     per project, base_event_seq BIGINT, created_by FK users, created_at)`,
+     `memory.branch_id FK branches NULL` (NULL = main; retrieval always filters
+     one branch), `forks` tracked as branches with `forked_from_project_id` +
+     `forked_from_branch_id`. Event log gains `branch_id` so any line replays.
+   - LLM interface (E1 only): extraction gains vc-intent detection
+     (`branch|fork|merge|diff|tag` + target names) → dedicated deterministic
+     applier (never free-form SQL); chat confirms destructive ops ("merge will
+     surface 2 disputes — proceed?").
+   - AuthZ (E1 only): branch creation = project member; merge to main =
+     lead/owner (same rule as revert); fork inherits source visibility (a fork
+     of a project you can't see is 403, same as memory access).
+   - Demo beats (E1 only): fork orca → change stack in fork → diff vs main →
+     merge back → dispute surfaces → resolve. Proof line: "git for what your
+     team believes."
+   - Explicit non-goals: not a code VCS, no cross-server federation, no file
+     storage — knowledge rows only.
+
 1. @-mentions (`@bob owns auth`) -> entity link, fixes pronoun "he moved" — high demo value, ~1h.
 2. Pinned canonical facts (lead-only toggle, contradict -> PR flow) — already in Phase 5, keep.
 3. "Ask the right person" fallback ("don't know, but @ajim owns auth") — cheap, impressive.

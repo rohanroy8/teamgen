@@ -6,3 +6,4 @@
 2026-09-18 phase 1 DONE: schema+auth+seed (3 users, 8 memories, chain ok, orphans 0, login/me/dup-signup ok)
 2026-09-18 phase 1 APPROVED by human; tag v0.1; starting Phase 2
 2026-09-18 phase 2 DONE: extract/resolve/write + /chat + invite; 7/7 tests green; live supersede verified
+2026-09-18 phase 2 APPROVED by human; tag v0.2; keys stored+verified (gemini-3.5-flash-lite, gpt-oss-20b); starting Phase 3

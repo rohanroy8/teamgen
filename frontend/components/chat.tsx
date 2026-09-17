@@ -1,6 +1,6 @@
 // ChatMain: header, messages, per-answer "Why this answer?", scoped input.
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,38 +9,22 @@ import { Skeleton } from "@/components/ui/collapsible";
 import { WhyCollapsible } from "@/components/ui/collapsible";
 import { useBackend, type Project } from "@/lib/api";
 
-type Msg = {
+export type Msg = {
   role: "user" | "assistant";
   text: string;
   used?: string[];
   rejected?: { decision: string; reason: string }[];
 };
 
-export function Chat({ project, username }: { project: Project | null; username: string }) {
+export function Chat({ project, username, msgs, setMsgs }: {
+  project: Project | null; username: string;
+  msgs: Msg[]; setMsgs: (updater: (m: Msg[]) => Msg[]) => void;
+}) {
   const api = useBackend();
-  const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
 
   const scopeHint = project ? `saving to: project/${project.name} as @${username}` : `saving to: personal as @${username}`;
-
-  // Per-scope chat persistence (browser-local): switching projects and coming
-  // back restores the conversation. Backend memory always persists server-side;
-  // cross-device chat history would need a dedicated endpoint (future).
-  const storeKey = `chat:${project?.id ?? "personal"}`;
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storeKey);
-      setMsgs(raw ? JSON.parse(raw) : []);
-    } catch {
-      setMsgs([]);
-    }
-  }, [storeKey]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(storeKey, JSON.stringify(msgs.slice(-50)));
-    } catch { /* storage full/blocked: chat still works in-memory */ }
-  }, [msgs, storeKey]);
 
   async function send() {
     const text = input.trim();

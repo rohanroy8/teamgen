@@ -8,3 +8,9 @@ frontend/next-env.d.ts
 .env
 .env.local
 pgdata/
+env_url.txt
+deploy_remote.py
+test_db.py
+deploy_schema.sh
+*.bak
+backend/*.bak

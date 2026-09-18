@@ -34,6 +34,7 @@ Classification rules:
 - "proposal": suggests something for consideration ("maybe we should", "what if we used").
 - "opinion" / "uncertain": hedged belief ("I think", "I believe", "probably", "not sure but").
 - override_signal = true ONLY when the message explicitly frames itself as correcting or confirming a prior fact (e.g. "actually", "correction", "confirmed", "the client confirmed") — NOT merely because it contradicts something.
+- Negations ("I don't live in Paris", "no longer", "not ... anymore") are NEVER asserted facts about the negated value. If they target a known fact, mark epistemic_status="correction" with override_signal=false and put the negated content in quote; if unsure, use "uncertain". Never emit the negated value as an asserted object.
 - Attribution: if the fact is about someone other than the speaker (e.g. "my friend lives in Delhi"), set subject to that person ("friend"), never the speaker.
 - Skip small talk (hello, thanks, ok), hypotheticals ("if I moved...", "agar..."), and questions — return [] for those.
 - NEVER extract passwords, OTPs, card numbers, SSNs, or API keys. If the message only contains secrets, return [].
@@ -86,6 +87,12 @@ _INJECTION = re.compile(
     re.IGNORECASE,
 )
 _FORGET_ONE = re.compile(r"^forget (my |the |that |those )?(?P<target>.+?)[.!]*$", re.IGNORECASE)
+# Negation-as-retraction ("I don't live in Paris", "no longer X"): never an
+# asserted fact; targets the contained words for retraction matching.
+_NEGATION = re.compile(
+    r"\b(don'?t|do not|no longer|not .+ anymore|never)\b", re.IGNORECASE)
+_NEG_STOP = {"i", "dont", "don", "do", "not", "no", "longer", "anyymore", "anymore",
+             "never", "my", "the", "that", "a", "an"}
 _ATTRIBUTION = re.compile(
     r"\bmy (friend|brother|sister|mom|dad|mother|father|wife|husband|partner|colleague|teammate|boss|manager|son|daughter)'?s?\b",
     re.IGNORECASE,
@@ -158,6 +165,13 @@ def extract_fallback(text: str, now: datetime | None = None) -> list[dict]:
         c["quote"] = t[:200]
         c["_retract_words"] = [w for w in re.findall(r"[a-z]+", m.group("target").lower())
                                if w not in _STOPWORDS]
+        return [c]
+    if _NEGATION.search(t):
+        c = _base_candidate(t)
+        c["is_retraction"] = True
+        c["_is_negation"] = True  # needs object overlap (denies a VALUE, not a field)
+        c["_retract_words"] = [w for w in re.findall(r"[a-z]+", t.lower())
+                               if w not in _STOPWORDS and w not in _NEG_STOP]
         return [c]
 
     # Leading correction framing ("Actually, my X is Y") applies to the whole

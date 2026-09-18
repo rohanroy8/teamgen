@@ -123,6 +123,12 @@ export function Inspector({ project }: { project: Project | null }) {
                     </div>
                     <p className="mt-1">{m.subject} {m.predicate} <strong>{m.object}</strong></p>
                     {m.quote ? <p className="mt-0.5 text-xs text-neutral-500">“{m.quote}”</p> : null}
+                    <div className="mt-1 flex items-center gap-2" title={`Confidence: ${(m.confidence || 0) * 100}%`}>
+                      <div className="h-1.5 flex-1 bg-neutral-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500" style={{ width: `${(m.confidence || 0) * 100}%` }} />
+                      </div>
+                      <span className="text-[10px] text-neutral-500">{Math.round((m.confidence || 0) * 100)}%</span>
+                    </div>
                     <div className="mt-1.5 flex gap-2 text-xs">
                       <button className="underline" onClick={() => openHistory(m.id)}>History</button>
                       <button className="underline" onClick={() => revert(m.id)}>Revert</button>

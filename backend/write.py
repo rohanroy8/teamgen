@@ -174,7 +174,8 @@ def ingest_text(conn, *, author_id: str, scope: str, scope_key: str,
                 )
                 db_msg_id = cur.fetchone()[0]
                 ctx = {"author_id": author_id, "scope": scope,
-                       "scope_key": scope_key, "project_id": project_id}
+                       "scope_key": scope_key, "project_id": project_id,
+                       "speaker": speaker}
                 for cand, vec in zip(candidates, vecs):
                     cand["_idem_key"] = _idem_key(session_key, msg_id, cand)
                     decision = resolve_candidate(conn, cand, ctx)

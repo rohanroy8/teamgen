@@ -15,14 +15,7 @@ from datetime import datetime, timezone
 
 from .embeddings import embed, to_pgvector
 
-HALF_LIVES = {
-    "ephemeral": 1.0,
-    "event": 30.0,
-    "fact": 60.0,
-    "decision": 90.0,
-    "preference": 180.0,
-    "identity": math.inf
-}
+HALF_LIFE_DAYS = 30.0
 VECTOR_TOPK = 20
 
 CURRENT_STATUSES = ("active", "disputed")
@@ -86,7 +79,7 @@ def retrieve(conn, *, user_id: str, scope: str, scope_key: str,
                 """SELECT m.id::text AS id, m.subject, m.predicate, m.object,
                           m.status, m.epistemic_status, m.confidence, m.importance,
                           m.access_count, m.valid_from, m.valid_to, m.quote,
-                          m.embedding, m.type, u.username AS author
+                          m.embedding, u.username AS author
                    FROM memory m JOIN users u ON u.id = m.author_id
                    WHERE m.user_id = %s AND m.scope = %s
                      AND m.project_id IS NOT DISTINCT FROM %s
@@ -101,7 +94,7 @@ def retrieve(conn, *, user_id: str, scope: str, scope_key: str,
                 """SELECT m.id::text AS id, m.subject, m.predicate, m.object,
                           m.status, m.epistemic_status, m.confidence, m.importance,
                           m.access_count, m.valid_from, m.valid_to, m.quote,
-                          m.embedding, m.type, u.username AS author
+                          m.embedding, u.username AS author
                    FROM memory m JOIN users u ON u.id = m.author_id
                    WHERE m.user_id = %s AND m.scope = %s
                      AND m.project_id IS NOT DISTINCT FROM %s
@@ -123,7 +116,7 @@ def retrieve(conn, *, user_id: str, scope: str, scope_key: str,
                 """SELECT m.id::text AS id, m.subject, m.predicate, m.object,
                           m.status, m.epistemic_status, m.confidence, m.importance,
                           m.access_count, m.valid_from, m.valid_to, m.quote,
-                          m.embedding, m.type, u.username AS author
+                          m.embedding, u.username AS author
                    FROM memory m JOIN users u ON u.id = m.author_id
                    WHERE m.user_id = %s AND m.scope = %s
                      AND m.project_id IS NOT DISTINCT FROM %s
@@ -153,14 +146,7 @@ def retrieve(conn, *, user_id: str, scope: str, scope_key: str,
             if len(emb) == len(qvec):
                 sim = max(sim, max(0.0, cosine(qvec, emb)))
         age_days = max(0.0, (ref - r["valid_from"]).total_seconds() / 86400.0)
-        mtype = r.get("type", "fact")
-        hl = HALF_LIVES.get(mtype, 30.0)
-        recency = math.exp(-age_days / hl) if hl != math.inf else 1.0
-        
-        # Proactive staleness check
-        if mtype in ("fact", "preference", "decision") and age_days > hl:
-            r["needs_confirmation"] = True
-            
+        recency = math.exp(-age_days / HALF_LIFE_DAYS)
         conf = r["confidence"] if r["confidence"] is not None else 0.5
         access = min(1.0, math.log1p(r["access_count"] or 0) / math.log1p(9))
         score = (0.55 * sim + 0.10 * recency + 0.15 * (r["importance"] or 0.5)

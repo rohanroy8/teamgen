@@ -158,3 +158,18 @@ def test_t14_idempotent_replay():
     trace = ingest_auto(s, "My editor is vim", "dup1", [C("me", "editor", "vim")])
     assert trace["writes"] == []
     assert len(rows(s, "editor")) == 1
+
+
+# Negation denies a VALUE: "I don't live in Paris" must not create/retract wrong rows
+def test_negation_no_garbage():
+    from backend.extract import extract_fallback
+
+    s = scope()
+    ingest(s, "I live in Lyon", "m1", [C("me", "lives_in", "Lyon")])
+    cands = extract_fallback("I don't live in Paris")
+    assert cands and cands[0]["is_retraction"] is True
+    trace = ingest_auto(s, "I don't live in Paris", "m2")
+    # Paris named but no Paris fact exists -> noop; Lyon untouched and active
+    assert trace["writes"][0]["decision"] in ("noop", "retract")
+    r = rows(s, "lives_in")
+    assert [x[1] for x in r] == ["Lyon"] and r[0][2] == "active"

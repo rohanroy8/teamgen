@@ -417,6 +417,14 @@ def proposal_reject(proposal_id: str, user: dict = Depends(get_current_user)):
         conn.close()
 
 
+@app.post("/eval/run")
+def eval_run(user: dict = Depends(get_current_user)):
+    """Live scoreboard: full pytest suite in a subprocess (offline, isolated)."""
+    from .eval_run import run_eval
+
+    return run_eval()
+
+
 class MemberRoleIn(BaseModel):
     username: str = Field(min_length=1)
     role: str = Field(description="creator|maintainer|contributor|viewer")

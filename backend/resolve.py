@@ -75,8 +75,19 @@ def find_vector_matches(conn, scope_key: str, scope: str, project_id: str | None
     return [r for r in rows if r["id"] not in set(exclude_ids) and r["sim"] >= threshold]
 
 
+def _stemset(s: str) -> set[str]:
+    toks = set()
+    for w in norm(s).split():
+        toks.add(w)
+        if len(w) > 3 and w.endswith("s"):
+            toks.add(w[:-1])
+    return toks
+
+
 def find_retraction_targets(conn, scope_key: str, scope: str,
-                            project_id: str | None, words: list[str]) -> list[dict]:
+                            project_id: str | None, words: list[str],
+                            speaker: str | None = None,
+                            require_object_match: bool = False) -> list[dict]:
     if not words:
         return []
     with conn.cursor() as cur:
@@ -90,16 +101,16 @@ def find_retraction_targets(conn, scope_key: str, scope: str,
         cols = [d[0] for d in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     words = set(words)
-
-    def toks(s: str) -> set[str]:
-        return set(norm(s).split())
-
+    aliases = {norm(speaker or ""), "me", "i", "myself"} - {""}
     hits = []
     for r in rows:
-        p, s = toks(r["predicate"]), toks(r["subject"])
-        if (p and p <= words) or (s and s <= words) \
-                or norm(r["predicate"]) in words or norm(r["subject"]) in words:
-            hits.append(r)
+        subj_ok = norm(r["subject"]) in aliases or _stemset(r["subject"]) <= words
+        pred_ok = _stemset(r["predicate"]) <= words or norm(r["predicate"]) in words
+        if not (subj_ok and pred_ok):
+            continue
+        if require_object_match and not (_stemset(r["object"]) & words):
+            continue  # negation denies a VALUE: object must be named
+        hits.append(r)
     return hits
 
 
@@ -113,7 +124,9 @@ def resolve_candidate(conn, cand: dict, ctx: dict) -> dict:
 
     if cand.get("is_retraction"):
         targets = find_retraction_targets(
-            conn, scope_key, scope, project_id, cand.get("_retract_words", []))
+            conn, scope_key, scope, project_id, cand.get("_retract_words", []),
+            speaker=ctx.get("speaker"),
+            require_object_match=cand.get("_is_negation", False))
         if targets:
             return {"decision": "retract", "targets": targets,
                     "candidate": cand, "reason": "targeted forget -> retract"}

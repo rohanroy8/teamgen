@@ -1,0 +1,1 @@
+postgresql://postgres.yeyodpcyopahlbvctbmr:nightswamp888%40@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require
